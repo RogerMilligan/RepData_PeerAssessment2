@@ -1,0 +1,123 @@
+---
+title: 'Reproducible Research: Storm Data Analysis'
+author: "Roger Milligan"
+date: "Sunday, June 21, 2015"
+output: html_document
+---
+## Title  
+Analysis of NOAA Storm Database in order to determine which events are the most harmful to population health and which have the greatest economic consequences in terms of damage to property and crops.
+
+## Synopsis
+
+Storms and other severe weather events can cause both public health and economic problems for communities and municipalities. Many severe events can result in fatalities, injuries, and CROPerty damage, and preventing such outcomes to the extent possible is a key concern.
+
+This project involves exploring the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database. This database tracks characteristics of major storms and weather events in the United States, including when and where they occur, as well as estimates of any fatalities, injuries, and CROPerty damage.  The data set contains data from 1950 to November 2011.
+
+Data was prepared by calculating the total cost of propertyt and crop damage and then summarising and ranking this by event type.  The same was done for personal loss due to Injury and Fatalities.  
+
+Tornado, Excessive Heat, Flash Flood, Heat and Lightning are the top 5 most harmful events in terms of fatalities.
+Tornado, TSTM Wind, Flood, Excessive Heat and Lightning are the top 5 most harmful events in terms of injuries.
+Flood, Huricane/Typhoon, Tornado, Storm Surge and Hail are the top 5 most harmful events in terms of economic consequences due to damage to property and crops.
+
+
+## Data Processing
+
+```{r cache = TRUE}
+#setwd("C:/Roger Docs/Documents/DS/ReprResearch/RepData_PeerAssessment2")
+if (!file.exists("data")) {dir.create("data")}
+          
+filename <- "./data/StormData.csv.bz2"
+if(!file.exists(filename)) {
+        fileURL <- "http://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
+        download.file(fileURL, destfile = filename)
+}
+rawStormData <- read.csv(bzfile(filename), header = TRUE,  stringsAsFactors = FALSE)
+#summary(rawStormData)
+#str(rawStormData)
+#dim(rawStormData)
+#head(rawStormData, n = 2)
+```
+
+```{r}
+columns <- c("EVTYPE", "FATALITIES", "INJURIES", "PROPDMG", "PROPDMGEXP", "CROPDMG", "CROPDMGEXP")
+StormData <- rawStormData[columns]
+```
+
+### Data transformations
+In order to calculate the economic impact of events (property plus crop damage), the damage figures need to be multiplied by the exponents.  The exponents first need to be converted from 1,H,2,K,3,4,5,M,6,7,8,B to the power of 10. All exponents were converted to uppercase before processing.
+
+Convert property damage exponents to numeric multipliers
+```{r}
+unique(StormData$PROPDMGEXP)
+StormData$PROPDMGEXP <- toupper(StormData$PROPDMGEXP)
+StormData$PROPDMGMULT[StormData$PROPDMGEXP == "B"]   <- 1000000000
+StormData$PROPDMGMULT[StormData$PROPDMGEXP == "8"]   <- 100000000
+StormData$PROPDMGMULT[StormData$PROPDMGEXP == "7"]   <- 10000000
+StormData$PROPDMGMULT[StormData$PROPDMGEXP == "M" | StormData$PROPDMGEXP == "6"] <- 1000000
+StormData$PROPDMGMULT[StormData$PROPDMGEXP == "5"]   <- 100000
+StormData$PROPDMGMULT[StormData$PROPDMGEXP == "4"]   <- 10000
+StormData$PROPDMGMULT[StormData$PROPDMGEXP == "K" | StormData$PROPDMGEXP == "3"] <- 1000
+StormData$PROPDMGMULT[StormData$PROPDMGEXP == "H" | StormData$PROPDMGEXP == "2"] <- 100
+StormData$PROPDMGMULT[StormData$PROPDMGEXP == "1"]   <- 10
+StormData$PROPDMGMULT[StormData$PROPDMGEXP == "" | StormData$PROPDMGEXP == "0"] <- 1
+StormData$PROPDMGMULT[StormData$PROPDMGEXP == "+" | StormData$PROPDMGEXP == "-" | StormData$PROPDMGEXP == "?"] <- 0
+unique(StormData$PROPDMGMULT)
+```
+
+Convert crop damage exponents to numeric multipliers
+```{r}
+unique(StormData$CROPDMGEXP)
+StormData$CROPDMGEXP <- toupper(StormData$CROPDMGEXP)
+StormData$CROPDMGMULT[StormData$CROPDMGEXP == "B"]   <- 1000000000
+StormData$CROPDMGMULT[StormData$CROPDMGEXP == "8"]   <- 100000000
+StormData$CROPDMGMULT[StormData$CROPDMGEXP == "7"]   <- 10000000
+StormData$CROPDMGMULT[StormData$CROPDMGEXP == "M" | StormData$CROPDMGEXP == "6"] <- 1000000
+StormData$CROPDMGMULT[StormData$CROPDMGEXP == "5"]   <- 100000
+StormData$CROPDMGMULT[StormData$CROPDMGEXP == "4"]   <- 10000
+StormData$CROPDMGMULT[StormData$CROPDMGEXP == "K" | StormData$CROPDMGEXP == "3"] <- 1000
+StormData$CROPDMGMULT[StormData$CROPDMGEXP == "H" | StormData$CROPDMGEXP == "2"] <- 100
+StormData$CROPDMGMULT[StormData$CROPDMGEXP == "1"]   <- 10
+StormData$CROPDMGMULT[StormData$CROPDMGEXP == "" | StormData$CROPDMGEXP == "0"] <- 1
+StormData$CROPDMGMULT[StormData$CROPDMGEXP == "+" | StormData$CROPDMGEXP == "-" | StormData$CROPDMGEXP == "?"] <- 0
+unique(StormData$CROPDMGMULT)
+```
+
+Calculate total damage per event
+```{r}
+StormData$TOTDMG <- as.numeric(StormData$PROPDMG) * as.numeric(StormData$PROPDMGMULT) + as.numeric(StormData$CROPDMG) * as.numeric(StormData$CROPDMGMULT)
+```
+
+## Results
+
+1. Which types of events are most harmful to population health?
+(Fatalities and Injuries are analysed separately as there is no given algorithm for determining the combined overall impact.)
+
+Fatalities:
+```{r}
+FatSumm <- aggregate(FATALITIES ~ EVTYPE, StormData, sum)
+TopFatSumm <- FatSumm[with(FatSumm, order(-FATALITIES)), ][1:8, ]
+TopFatSumm
+pie(TopFatSumm$FATALITIES, labels = TopFatSumm$EVTYPE, main = "Total Fatalities per Event Type")
+```
+  
+Tornado, Excessive Heat, Flash Flood, Heat and Lightning are the top 5 (in descending order) most harmful events in terms of fatalities.
+
+Injuries:
+```{r}
+InjSumm <- aggregate(INJURIES ~ EVTYPE, StormData, sum)
+TopInjSumm <- InjSumm[with(InjSumm, order(-INJURIES)), ][1:8, ]
+TopInjSumm
+pie(TopInjSumm$INJURIES, labels = TopInjSumm$EVTYPE,  main = "Total Injuries per Event Type")
+```
+  
+Tornado, TSTM Wind, Flood, Excessive Heat and Lightning are the top 5 (in descending order) most harmful events in terms of injuries.
+
+
+2. Which types of events have the greatest economic consequences?
+```{r}
+EcoDmgSumm <- aggregate(TOTDMG ~ EVTYPE, StormData, sum)
+TopEcoDmgSumm <- EcoDmgSumm[with(EcoDmgSumm, order(-TOTDMG)), ][1:8, ]
+TopEcoDmgSumm
+pie(TopEcoDmgSumm$TOTDMG, labels = TopEcoDmgSumm$EVTYPE, main = "Total Injuries per Event Type")
+```
+Flood, Huricane/Typhoon, Tornado, Storm Surge and Hail are the top 5 (in descending order) most harmful events in terms of economic consequences due to damage to property and crops.
